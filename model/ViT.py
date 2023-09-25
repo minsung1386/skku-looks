@@ -148,9 +148,13 @@ target = './target.jpg'
 
 target_img = Image.open(target)
 
+image_max = 500
 # 폴더 내의 모든 파일을 검색
 for filename in os.listdir(folder_path):
     file_path = os.path.join(folder_path, filename)
+    
+    if image_max == 0:
+        break
     
     # 파일이 이미지 파일인지 확인 (확장자로 검사)
     if filename.endswith(".jpg") or filename.endswith(".png"):
@@ -158,6 +162,7 @@ for filename in os.listdir(folder_path):
             # 이미지를 PIL Image로 열어서 리스트에 추가
             img = Image.open(file_path)
             image_list.append(img)
+            image_max -= 1
         except Exception as e:
             print(f"이미지 열기 오류: {file_path}, 오류 메시지: {str(e)}")
 
@@ -172,19 +177,20 @@ vit_model = ViT()
 with torch.no_grad():
     target_output = vit_model(target_progessed)
 
-for id, x in tqdm(processed):
+# 이미지 유사도 계산
+for x in tqdm(processed):
     with torch.no_grad():
         output = vit_model(x)
-        embeddings.append(output)
+        sim = cosine_similarity(target_output, output)
+        embeddings.append(sim)
         
-sorted_outputs = sorted(embeddings, key=lambda item: item[-1], reverse=True)
+indexed_list = [(idx, value) for idx, value in enumerate(embeddings)]
+        
+sorted_list = sorted(indexed_list, key=lambda x: x[1], reverse=True)
 
-    
-# patch_embeddings = outputs[0]
-
-# print(patch_embeddings)
-# patches_embedded = PatchEmbedding()(x)
-# print(patches_embedded)
-# TransformerEncoderBlock()(patches_embedded).shape
-
-# summary(ViT(), (3, 224, 224), device='cpu')
+# 상위 5개 이미지 출력
+image_list[sorted_list[0][0]].show()
+image_list[sorted_list[1][0]].show()
+image_list[sorted_list[2][0]].show()
+image_list[sorted_list[3][0]].show()
+image_list[sorted_list[4][0]].show()
