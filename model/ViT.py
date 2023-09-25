@@ -1,7 +1,9 @@
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import os
 
+from tqdm import tqdm
 from torch import nn
 from torch import Tensor
 from PIL import Image
@@ -9,15 +11,7 @@ from torchvision.transforms import Compose, Resize, ToTensor
 from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 from torchsummary import summary
-
-
-img = Image.open('./image/cat.jpg')
-
-# resize to imagenet size 
-transform = Compose([Resize((224, 224)), ToTensor()])
-x = transform(img)
-x = x.unsqueeze(0) # add batch dim
-
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class PatchEmbedding(nn.Module):
@@ -43,7 +37,7 @@ class PatchEmbedding(nn.Module):
         x += self.positions
         return x
     
-    
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, emb_size: int = 768, num_heads: int = 8, dropout: float = 0):
         super().__init__()
@@ -117,10 +111,6 @@ class TransformerEncoderBlock(nn.Sequential):
             )
             ))
         
-print(PatchEmbedding()(x).shape)
-patches_embedded = PatchEmbedding()(x)
-print(patches_embedded)
-TransformerEncoderBlock()(patches_embedded).shape
 
 class TransformerEncoder(nn.Sequential):
     def __init__(self, depth: int = 12, **kwargs):
@@ -149,6 +139,52 @@ class ViT(nn.Sequential):
             TransformerEncoder(depth, emb_size=emb_size, **kwargs),
             ClassificationHead(emb_size, n_classes)
         )
+
+
+# image_list에는 PIL Image로 열린 이미지들이 저장됩니다.
+image_list = []
+folder_path = './image/'
+target = './target.jpg'
+
+target_img = Image.open(target)
+
+# 폴더 내의 모든 파일을 검색
+for filename in os.listdir(folder_path):
+    file_path = os.path.join(folder_path, filename)
+    
+    # 파일이 이미지 파일인지 확인 (확장자로 검사)
+    if filename.endswith(".jpg") or filename.endswith(".png"):
+        try:
+            # 이미지를 PIL Image로 열어서 리스트에 추가
+            img = Image.open(file_path)
+            image_list.append(img)
+        except Exception as e:
+            print(f"이미지 열기 오류: {file_path}, 오류 메시지: {str(e)}")
+
+# resize to imagenet size
+transform = Compose([Resize((224, 224)), ToTensor()])
+processed = [transform(img).unsqueeze(0) for img in image_list]
+target_progessed = transform(target_img).unsqueeze(0)
+
+embeddings = []
+vit_model = ViT()
+
+with torch.no_grad():
+    target_output = vit_model(target_progessed)
+
+for id, x in tqdm(processed):
+    with torch.no_grad():
+        output = vit_model(x)
+        embeddings.append(output)
         
-        
-summary(ViT(), (3, 224, 224), device='cpu')
+sorted_outputs = sorted(embeddings, key=lambda item: item[-1], reverse=True)
+
+    
+# patch_embeddings = outputs[0]
+
+# print(patch_embeddings)
+# patches_embedded = PatchEmbedding()(x)
+# print(patches_embedded)
+# TransformerEncoderBlock()(patches_embedded).shape
+
+# summary(ViT(), (3, 224, 224), device='cpu')
